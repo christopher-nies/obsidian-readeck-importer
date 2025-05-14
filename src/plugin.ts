@@ -97,11 +97,24 @@ export default class RDPlugin extends Plugin {
 
 	async addBookmarkMD(bookmark: any, bookmarkData: any, annotationsData: any) {
 		const filePath = `${this.bookmarkFolderPath}/${Utils.sanitizeFileName(bookmark.title)}.md`;
-		let noteContent = bookmarkData;
-		if (annotationsData) {
+		let noteContent = "---\ntags:" + 
+		"\ntype: " + bookmark.type + 
+		"\ndateSaved: " + bookmark.created +
+		"\ndatePublished: " + bookmark.published +  
+		"\nreadeckUrl: " + bookmark.href + 
+		"\noriginalUrl: " + bookmark.url + 
+		"\nid: " + bookmark.id +
+		"\nauthor: " + bookmark.authors[0] + 
+		"\n---\n\n"
+		noteContent += "# " + bookmark.title + "\n" // h1 title
+		noteContent += "by [[" + bookmark.authors[0] + "]]\n\n"
+		noteContent += "> [!abstract]+ \n> abstract:: " + bookmark.description + "\n\n"
+		if (annotationsData) { // h2 annotations
 			const annotations = this.buildAnnotations(bookmark, annotationsData);
-			noteContent += `\n\n${annotations}`;
+			noteContent += `${annotations}\n\n`;
 		}
+		noteContent += "# Content\n\n" // h1 content
+		noteContent += bookmarkData 
 		await this.createFile(bookmark, filePath, noteContent);
 	}
 
@@ -152,12 +165,12 @@ export default class RDPlugin extends Plugin {
 	}
 
 	buildAnnotations(bookmark: any, annotationsData: any) {
-		let annotationsContent = "# Annotations\n";
+		let annotationsContent = "## Highlights\n\n";
 		if (annotationsData) {
 			annotationsContent = annotationsContent + annotationsData.map(
 				(ann: any) =>
-					`> ${ann.text}` +
-					` - [#](${this.settings.apiUrl}/bookmarks/${bookmark.id}#annotation-${ann.id})`
+					`> [!${ann.color}]+ ${new Date(ann.created).toISOString().split('T')[0]} [⤴️](${this.settings.apiUrl}/bookmarks/${bookmark.id}#annotation-${ann.id}) \n` +
+					`> ${ann.text}`
 			).join('\n\n');
 		}
 		return annotationsContent
