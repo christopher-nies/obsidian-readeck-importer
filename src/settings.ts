@@ -1,6 +1,7 @@
 import { App, ButtonComponent, Modal, Notice, PluginSettingTab, Setting, TextComponent } from "obsidian";
 
 import ReadeckPlugin from "./plugin";
+import { DEFAULT_FRONTMATTER_TEMPLATE } from "./interfaces";
 
 export class RDSettingTab extends PluginSettingTab {
 	plugin: ReadeckPlugin;
@@ -205,6 +206,35 @@ export class RDSettingTab extends PluginSettingTab {
 						await this.plugin.saveData(this.plugin.settings);
 					})
 			});
+
+		const templateSetting = new Setting(containerEl)
+			.setName('Frontmatter template')
+			.setDesc('Custom frontmatter template. Available placeholders: {{title}}, {{url}}, {{site}}, {{created}}, {{published}}, {{author}} (first only), {{authors}} (all, one per line), {{label}} (first only), {{labels}} (all, one per line). List placeholders repeat the whole line for each value, so wikilinks like [[{{labels}}]] work as expected.')
+			.addTextArea((text) => {
+				text
+					.setValue(this.plugin.settings.frontmatterTemplate || DEFAULT_FRONTMATTER_TEMPLATE)
+					.onChange(async (value) => {
+						this.plugin.settings.frontmatterTemplate = value || DEFAULT_FRONTMATTER_TEMPLATE;
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.rows = 12;
+				text.inputEl.style.width = '100%';
+				text.inputEl.style.fontFamily = 'monospace';
+				text.inputEl.disabled = !this.plugin.settings.customFrontmatter;
+			});
+
+		new Setting(containerEl)
+			.setName('Use custom frontmatter')
+			.setDesc('Replace the default frontmatter with the template above')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.customFrontmatter)
+				.onChange(async (value) => {
+					this.plugin.settings.customFrontmatter = value;
+					await this.plugin.saveSettings();
+					// Enable/disable the template textarea reactively
+					const textArea = templateSetting.controlEl.querySelector('textarea');
+					if (textArea) textArea.disabled = !value;
+				}));
 	}
 }
 

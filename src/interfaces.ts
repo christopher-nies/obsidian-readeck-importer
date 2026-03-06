@@ -9,6 +9,8 @@ export interface ReadeckPluginSettings {
 	overwrite: boolean;
 	delete: boolean;
 	mode: string;
+	customFrontmatter: boolean;
+	frontmatterTemplate: string;
 }
 
 // i.e {"version":{"canonical":"0.21.5","release":"0.21.5","build":""},"features":["oauth"]}
@@ -106,6 +108,20 @@ export interface Annotation {
 	bookmark_site_name: string,
 }
 
+export const DEFAULT_FRONTMATTER_TEMPLATE = `---
+title: "{{title}}"
+url: "{{url}}"
+site: "{{site}}"
+created: "{{created}}"
+published: "{{published}}"
+author: "[[{{author}}]]"
+authors:
+  - "[[{{authors}}]]"
+tags:
+  - "[[{{labels}}]]"
+---
+`;
+
 export const DEFAULT_SETTINGS: ReadeckPluginSettings = {
 	apiUrl: "",
 	apiToken: "",
@@ -116,4 +132,6 @@ export const DEFAULT_SETTINGS: ReadeckPluginSettings = {
 	overwrite: false,
 	delete: false,
 	mode: "text",
+	customFrontmatter: false,
+	frontmatterTemplate: DEFAULT_FRONTMATTER_TEMPLATE,
 }

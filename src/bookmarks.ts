@@ -115,7 +115,9 @@ export class BookmarksService {
 				// Create bookmark folder
 				const bookmarkFolderPath = `${this.settings.folder}/${id}`;
 				await this.createFolderIfNotExists(id, bookmarkFolderPath);
-				const bookmarkHeader = this.generateBookmarkHeader(bookmark.json);
+				const bookmarkHeader = this.settings.customFrontmatter
+					? this.renderFrontmatterTemplate(bookmark.json)
+					: this.generateBookmarkHeader(bookmark.json);
 				const bookmarkContent = bookmarkHeader + (bookmark.text || '');
 				this.addBookmarkMD(id, bookmark.json.title, bookmarkContent, bookmark.annotations, bookmarkFolderPath);
 			}
@@ -215,6 +217,56 @@ export class BookmarksService {
 			).join('\n\n');
 		}
 		return annotationsContent;
+	}
+
+	private renderFrontmatterTemplate(bookmark: Bookmark): string {
+		const template = this.settings.frontmatterTemplate;
+
+		// Scalar values — substituted directly, empty string if missing
+		const scalars: Record<string, string> = {
+			'{{title}}':     bookmark.title ?? '',
+			'{{url}}':       bookmark.url ?? '',
+			'{{site}}':      bookmark.site ?? '',
+			'{{created}}':   bookmark.created?.toISOString() ?? '',
+			'{{published}}': bookmark.published?.toISOString().split('T')[0] ?? '',
+			'{{author}}':    bookmark.authors?.[0] ?? '',
+			'{{label}}':     bookmark.labels?.[0] ?? '',
+		};
+
+		// List values — each expands by repeating the whole line per value
+		const lists: Record<string, string[]> = {
+			'{{authors}}': bookmark.authors ?? [],
+			'{{labels}}':  bookmark.labels ?? [],
+		};
+
+		// Process line by line so list placeholders can expand to multiple lines
+		const lines = template.split('\n');
+		const rendered: string[] = [];
+
+		for (const line of lines) {
+			// Check if this line contains a list placeholder
+			const listKey = Object.keys(lists).find(k => line.includes(k));
+			if (listKey) {
+				const values = lists[listKey];
+				if (values.length === 0) {
+					// Omit the line entirely when list is empty
+					continue;
+				}
+				// Repeat the line for each value, substituting the placeholder
+				for (const value of values) {
+					rendered.push(line.replace(listKey, value));
+				}
+			} else {
+				// Scalar substitution
+				let result = line;
+				for (const [placeholder, value] of Object.entries(scalars)) {
+					result = result.split(placeholder).join(value);
+				}
+				rendered.push(result);
+			}
+		}
+
+		return rendered.join('\n');
 	}
 
 	private generateBookmarkHeader(bookmark: Bookmark): string {
