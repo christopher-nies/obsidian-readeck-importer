@@ -110,22 +110,34 @@ export class BookmarksService {
 
 		// Process each bookmark
 		for (const [id, bookmark] of bookmarksData.entries()) {
-			// Create markdown note
+			const sanitizedTitle = Utils.sanitizeFileName(bookmark.json.title);
+			const hasImages = bookmark.images.length > 0;
+
+			// Determine paths: use a subfolder only when images need to be co-located
+			let mdPath: string;
+			let imgsFolderPath: string | null = null;
+
+			if (hasImages) {
+				const subfolderPath = `${this.settings.folder}/${sanitizedTitle}`;
+				await this.createFolderIfNotExists(id, subfolderPath);
+				mdPath = `${subfolderPath}/${sanitizedTitle}.md`;
+				imgsFolderPath = `${subfolderPath}/imgs`;
+				await this.createFolderIfNotExists(id, imgsFolderPath);
+			} else {
+				mdPath = `${this.settings.folder}/${sanitizedTitle}.md`;
+			}
+
+			// Write markdown note
 			if (bookmark.text || bookmark.annotations.length > 0) {
-				// Create bookmark folder
-				const bookmarkFolderPath = `${this.settings.folder}/${id}`;
-				await this.createFolderIfNotExists(id, bookmarkFolderPath);
-				const bookmarkHeader = this.generateBookmarkHeader(bookmark.json);
+				const bookmarkHeader = this.generateBookmarkHeader(id, bookmark.json);
 				const bookmarkContent = bookmarkHeader + (bookmark.text || '');
-				this.addBookmarkMD(id, bookmark.json.title, bookmarkContent, bookmark.annotations, bookmarkFolderPath);
+				await this.addBookmarkMD(id, bookmark.json.title, bookmarkContent, bookmark.annotations, mdPath);
 			}
 
 			// Save images
-			if (bookmark.images.length > 0 && bookmark.json) {
-				const bookmarkImgsFolderPath = `${this.settings.folder}/${id}/imgs`;
-				await this.createFolderIfNotExists(id, bookmarkImgsFolderPath);
+			if (hasImages && imgsFolderPath) {
 				for (const image of bookmark.images) {
-					const filePath = `${bookmarkImgsFolderPath}/${image.filename}`;
+					const filePath = `${imgsFolderPath}/${image.filename}`;
 					await this.createFile(bookmark.json.title, filePath, image.content, false);
 				}
 			}
@@ -135,8 +147,7 @@ export class BookmarksService {
 		if (this.settings.delete) {
 			const toDeleteIds = bookmarksStatus.filter(b => b.type === 'delete').map(b => b.id);
 			for (const id of toDeleteIds) {
-				const bookmarkFolderPath = `${this.settings.folder}/${id}`;
-				await this.deleteFolder(id, bookmarkFolderPath, true);
+				await this.deleteBookmark(id);
 			}
 		}
 		
@@ -163,8 +174,7 @@ export class BookmarksService {
 		return multipart;
 	}
 
-	private async addBookmarkMD(bookmarkId: string, bookmarkTitle: string, bookmarkContent: string | null, bookmarkAnnotations: Annotation[], bookmarkFolderPath?: string) {
-		const filePath = `${bookmarkFolderPath}/${Utils.sanitizeFileName(bookmarkTitle)}.md`;
+	private async addBookmarkMD(bookmarkId: string, bookmarkTitle: string, bookmarkContent: string | null, bookmarkAnnotations: Annotation[], filePath: string) {
 		let noteContent = bookmarkContent || '';
 		if (bookmarkAnnotations.length > 0) {
 			const annotations = this.buildAnnotations(bookmarkId, bookmarkAnnotations);
@@ -217,8 +227,9 @@ export class BookmarksService {
 		return annotationsContent;
 	}
 
-	private generateBookmarkHeader(bookmark: Bookmark): string {
+	private generateBookmarkHeader(id: string, bookmark: Bookmark): string {
 		let header = `---\n`;
+		header += `readeck-id: "${id}"\n`;
 		if (bookmark.title) {
 			header += `title: "${bookmark.title.replace(/"/g, '\\"')}"\n`;
 		}
@@ -275,14 +286,31 @@ export class BookmarksService {
 		}
 	}
 
-	private async deleteFolder(id: string, path:string, showNotice: boolean = false) {
-		const folder = this.app.vault.getAbstractFileByPath(path);
+	private async deleteBookmark(id: string) {
+		// Search only within the configured Readeck folder for a note whose
+		// frontmatter readeck-id matches the given ID.
+		const folderPrefix = this.settings.folder + "/";
+		const file = this.app.vault.getFiles().find(f => {
+			if (!f.path.startsWith(folderPrefix)) return false;
+			const cache = this.app.metadataCache.getFileCache(f);
+			return cache?.frontmatter?.["readeck-id"] === id;
+		});
 
-		if (folder && folder instanceof TFolder) {
-			await this.app.vault.delete(folder, true);
-			if (showNotice) { new Notice(`Readeck importer: Deleting bookmark ${id}`); }
-		} else if (!folder) {
-			if (showNotice) { new Notice(`Readeck importer: Error deleting bookmark ${id}`); }
+		if (!file) {
+			console.warn(`Readeck importer: Could not find local note for deleted bookmark ${id}`);
+			return;
+		}
+
+		// If the note lives in a subfolder that is a direct child of the Readeck
+		// folder (i.e. the images subfolder layout), delete the whole subfolder.
+		// Otherwise just delete the flat file.
+		const parent = file.parent;
+		if (parent && parent.path !== this.settings.folder) {
+			await this.app.vault.delete(parent, true);
+			new Notice(`Readeck importer: Deleting bookmark ${file.basename}`);
+		} else {
+			await this.app.vault.delete(file);
+			new Notice(`Readeck importer: Deleting bookmark ${file.basename}`);
 		}
 	}
 }

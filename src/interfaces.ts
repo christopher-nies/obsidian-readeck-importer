@@ -84,6 +84,7 @@ export interface BookmarkData {
 }
 
 export interface Bookmark {
+	id?: string,
 	title: string,
 	url?: string,
 	site?: string,
