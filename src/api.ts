@@ -49,7 +49,9 @@ export class ReadeckApi {
                 "with_html": false,
                 "with_markdown": markdown,
                 "with_resources": resources,
-                "resource_prefix": "./imgs"
+                // Empty prefix = absolute server URLs when not downloading resources,
+                // so image references in the markdown remain valid without local files.
+                "resource_prefix": resources ? "./imgs" : ""
             }),
         });
         return articleResponse;
